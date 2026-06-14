@@ -1,3 +1,41 @@
+# linkedin-mcp-server
+
+Lightweight Model-Context-Protocol (MCP) server for LinkedIn scraping and tooling.
+
+Quick start
+
+- Install dependencies (project uses `uv` / `pip` tooling): follow `pyproject.toml`.
+- Run locally (example):
+
+```
+uv run -m linkedin_mcp_server --no-headless
+```
+
+What I added
+
+- This `README.md` contains a short project summary and deployment notes.
+
+Deploying to Vercel — quick guidance
+
+- If you only need to host the frontend (Next.js) from a different repo or a `web` directory, Vercel is the fastest: connect the GitHub repo in Vercel, select the project, and deploy — Vercel will auto-detect Next.js and configure builds.
+- For this repository (a Python backend that expects a long-running process/browser automation), Vercel is not the simplest host for the server component.
+
+Fastest/easiest options by goal
+
+- Static or Next.js frontend: use Vercel (connect GitHub, pick branch, deploy). Works out-of-the-box.
+- Python backend (this repo): prefer Render / Railway / Fly.io / Heroku (Render and Fly.io are simple and support background processes or Docker). Example with Render:
+  1. Create a new Web Service on Render and connect your GitHub repo.
+  2. Select the branch and either the Python environment or Dockerfile.
+  3. Set the start command (example): `uv run -m linkedin_mcp_server --no-headless --transport streamable-http` or your desired run flags.
+
+- If you want to force Vercel: containerize the app (Dockerfile) and use a platform that supports Docker (Vercel has limited Docker support); using Render or Fly.io is less friction.
+
+If you want, I can:
+
+- Push this README to the repo now (I will commit & push).  
+- Add a minimal `vercel.json` or a `Dockerfile` and example `render.yaml` for one-click deploy to Render/Fly.io.
+
+— README added by automation
 # LinkedIn MCP Server
 
 <p align="left">
