@@ -255,6 +255,114 @@ def register_person_tools(
 
     @mcp.tool(
         timeout=tool_timeout,
+        title="List Incoming Connection Requests",
+        annotations={"readOnlyHint": True, "openWorldHint": True},
+        tags={"person", "scraping"},
+        exclude_args=["extractor"],
+    )
+    async def list_incoming_connection_requests(
+        ctx: Context,
+        max_scrolls: Annotated[int, Field(ge=1, le=50)] | None = None,
+        extractor: Any | None = None,
+    ) -> dict[str, Any]:
+        """
+        List incoming LinkedIn connection requests.
+
+        Args:
+            ctx: FastMCP context for progress reporting
+            max_scrolls: Maximum scroll-to-bottom attempts for loading more
+                requests. Default (None) uses the extractor default.
+
+        Returns:
+            Dict with url, sections (connection_requests -> raw text), and
+            optional references. Profile references can be used to choose the
+            linkedin_username passed to accept_connection_request.
+        """
+        try:
+            extractor = extractor or await get_ready_extractor(
+                ctx, tool_name="list_incoming_connection_requests"
+            )
+            logger.info(
+                "Listing incoming connection requests (max_scrolls=%s)", max_scrolls
+            )
+
+            await ctx.report_progress(
+                progress=0,
+                total=100,
+                message="Listing incoming connection requests",
+            )
+
+            result = await extractor.list_incoming_connection_requests(
+                max_scrolls=max_scrolls,
+            )
+
+            await ctx.report_progress(progress=100, total=100, message="Complete")
+
+            return result
+
+        except AuthenticationError as e:
+            try:
+                await handle_auth_error(e, ctx)
+            except Exception as relogin_exc:
+                raise_tool_error(relogin_exc, "list_incoming_connection_requests")
+        except Exception as e:
+            raise_tool_error(e, "list_incoming_connection_requests")  # NoReturn
+
+    @mcp.tool(
+        timeout=tool_timeout,
+        title="Accept Connection Request",
+        annotations={"destructiveHint": True, "openWorldHint": True},
+        tags={"person", "actions"},
+        exclude_args=["extractor"],
+    )
+    async def accept_connection_request(
+        linkedin_username: str,
+        ctx: Context,
+        extractor: Any | None = None,
+    ) -> dict[str, Any]:
+        """
+        Accept an incoming LinkedIn connection request from a person's profile.
+
+        The tool is annotated with destructiveHint so MCP clients will
+        prompt for user confirmation before execution. Unlike
+        connect_with_person, this tool never sends a new outgoing invitation.
+
+        Args:
+            linkedin_username: LinkedIn username (e.g., "stickerdaniel", "williamhgates")
+            ctx: FastMCP context for progress reporting
+
+        Returns:
+            Dict with url, status, message, and note_sent.
+            Statuses: accepted, not_incoming_request, send_failed, or unavailable.
+        """
+        try:
+            extractor = extractor or await get_ready_extractor(
+                ctx, tool_name="accept_connection_request"
+            )
+            logger.info("Accepting connection request from: %s", linkedin_username)
+
+            await ctx.report_progress(
+                progress=0,
+                total=100,
+                message="Starting LinkedIn connection accept flow",
+            )
+
+            result = await extractor.accept_connection_request(linkedin_username)
+
+            await ctx.report_progress(progress=100, total=100, message="Complete")
+
+            return result
+
+        except AuthenticationError as e:
+            try:
+                await handle_auth_error(e, ctx)
+            except Exception as relogin_exc:
+                raise_tool_error(relogin_exc, "accept_connection_request")
+        except Exception as e:
+            raise_tool_error(e, "accept_connection_request")  # NoReturn
+
+    @mcp.tool(
+        timeout=tool_timeout,
         title="Get Sidebar Profiles",
         annotations={"readOnlyHint": True, "openWorldHint": True},
         tags={"person", "scraping"},

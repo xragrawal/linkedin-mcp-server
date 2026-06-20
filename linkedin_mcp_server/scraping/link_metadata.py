@@ -101,6 +101,7 @@ _REFERENCE_CAPS = {
     "contact_info": 8,
     "inbox": 30,
     "conversation": 12,
+    "connection_requests": 30,
     # Headroom for get_feed's num_posts ceiling (Field(ge=1, le=50)).
     # Kept in sync with the literal cap=50 in extractor._build_feed_references
     # where SDUI-derived /posts/<slug> permalinks are appended.

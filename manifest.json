@@ -53,6 +53,14 @@
       "description": "Send a connection request or accept an incoming one, with optional note"
     },
     {
+      "name": "list_incoming_connection_requests",
+      "description": "List incoming LinkedIn connection requests with profile references"
+    },
+    {
+      "name": "accept_connection_request",
+      "description": "Accept a specific incoming LinkedIn connection request by username without sending a new outgoing invitation"
+    },
+    {
       "name": "get_sidebar_profiles",
       "description": "Extract profile URLs from LinkedIn sidebar recommendation sections on a profile page"
     },

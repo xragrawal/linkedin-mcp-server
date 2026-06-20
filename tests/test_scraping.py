@@ -1662,6 +1662,132 @@ class TestConnectWithPerson:
         assert result["status"] == "accepted"
         mock_sleep.assert_awaited_once()
 
+    async def test_accept_connection_request_accepts_incoming(self, mock_page):
+        """Accept-only tool uses the same structural incoming-request path."""
+        extractor = LinkedInExtractor(mock_page)
+        pre = "Eric\n\n· 2.\n\nAachen\n\nAnnehmen\nIgnorieren\nMehr\nInfo\n"
+        post = "Eric\n\n· 1.\n\nAachen\n\nNachricht\nMehr\nInfo\n"
+
+        with (
+            patch.object(
+                extractor,
+                "scrape_person",
+                self._mock_scrape(pre, follow_up_text=post),
+            ),
+            patch.object(
+                extractor,
+                "_read_action_signals",
+                new_callable=AsyncMock,
+                side_effect=[
+                    self._signals(incoming_row=True),
+                    self._signals(compose=True),
+                ],
+            ),
+            patch.object(
+                extractor,
+                "_click_incoming_accept",
+                new_callable=AsyncMock,
+                return_value=True,
+            ) as mock_accept,
+            patch.object(
+                extractor,
+                "_navigate_to_page",
+                new_callable=AsyncMock,
+            ) as mock_nav,
+            patch.object(
+                extractor,
+                "_submit_invite_dialog",
+                new_callable=AsyncMock,
+            ) as mock_submit,
+        ):
+            result = await extractor.accept_connection_request("testuser")
+
+        assert result["status"] == "accepted"
+        mock_accept.assert_awaited_once()
+        mock_nav.assert_not_awaited()
+        mock_submit.assert_not_awaited()
+
+    async def test_accept_connection_request_does_not_send_outgoing(self, mock_page):
+        """Connectable profiles return not_incoming_request with no write path."""
+        extractor = LinkedInExtractor(mock_page)
+        text = "Jane\n\n· 3rd\n\nEngineer\n\nConnect\nMore\nAbout\n"
+
+        with (
+            patch.object(
+                extractor,
+                "scrape_person",
+                self._mock_scrape(text),
+            ),
+            patch.object(
+                extractor,
+                "_read_action_signals",
+                new_callable=AsyncMock,
+                return_value=self._signals(invite=True),
+            ),
+            patch.object(
+                extractor,
+                "_click_incoming_accept",
+                new_callable=AsyncMock,
+                return_value=True,
+            ) as mock_accept,
+            patch.object(
+                extractor,
+                "_navigate_to_page",
+                new_callable=AsyncMock,
+            ) as mock_nav,
+            patch.object(
+                extractor,
+                "_submit_invite_dialog",
+                new_callable=AsyncMock,
+            ) as mock_submit,
+        ):
+            result = await extractor.accept_connection_request("testuser")
+
+        assert result["status"] == "not_incoming_request"
+        mock_accept.assert_not_awaited()
+        mock_nav.assert_not_awaited()
+        mock_submit.assert_not_awaited()
+
+    async def test_list_incoming_connection_requests(self, mock_page):
+        extractor = LinkedInExtractor(mock_page)
+        references: list[Reference] = [
+            {"kind": "person", "url": "/in/jane-doe/", "text": "Jane Doe"},
+        ]
+
+        with patch.object(
+            extractor,
+            "extract_page",
+            new_callable=AsyncMock,
+            return_value=extracted("Jane Doe\nFounder at Acme", references),
+        ) as mock_extract:
+            result = await extractor.list_incoming_connection_requests(max_scrolls=8)
+
+        assert result["url"] == "https://www.linkedin.com/mynetwork/invitation-manager/"
+        assert result["sections"]["connection_requests"] == "Jane Doe\nFounder at Acme"
+        assert result["references"]["connection_requests"] == references
+        mock_extract.assert_awaited_once_with(
+            "https://www.linkedin.com/mynetwork/invitation-manager/",
+            section_name="connection_requests",
+            max_scrolls=8,
+        )
+
+    async def test_list_incoming_connection_requests_rate_limited(self, mock_page):
+        extractor = LinkedInExtractor(mock_page)
+
+        with patch.object(
+            extractor,
+            "extract_page",
+            new_callable=AsyncMock,
+            return_value=extracted(_RATE_LIMITED_MSG),
+        ):
+            result = await extractor.list_incoming_connection_requests()
+
+        assert result["sections"] == {}
+        assert (
+            result["section_errors"]["connection_requests"]["error_type"]
+            == "rate_limit"
+        )
+
     async def test_returns_unavailable_when_no_signals_and_text(self, mock_page):
         """No structural signals, no actionable text → connect_unavailable."""
         extractor = LinkedInExtractor(mock_page)

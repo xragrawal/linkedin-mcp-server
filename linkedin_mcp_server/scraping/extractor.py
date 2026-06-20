@@ -2194,6 +2194,133 @@ class LinkedInExtractor:
             profile=verified_text or page_text,
         )
 
+    async def accept_connection_request(self, username: str) -> dict[str, Any]:
+        """Accept an incoming LinkedIn connection request from a profile.
+
+        This is the accept-only counterpart to ``connect_with_person``. It
+        uses the same locale-independent incoming-request fingerprint, but it
+        never opens the custom-invite deeplink and never sends a new outgoing
+        invitation. Non-incoming states are reported without side effects.
+        """
+        from linkedin_mcp_server.scraping.connection import detect_connection_state
+
+        url = f"https://www.linkedin.com/in/{username}/"
+
+        profile = await self.scrape_person(username, {"main_profile"})
+        page_text = profile.get("sections", {}).get("main_profile", "")
+        if not page_text:
+            return _connection_result(
+                url, "unavailable", "Could not read profile page."
+            )
+
+        signals = await self._read_action_signals(username)
+        state = detect_connection_state(signals)
+        logger.info(
+            "Incoming connection signals for %s: state=%s signals=%s",
+            username,
+            state,
+            signals,
+        )
+
+        if state == "incoming_request":
+            clicked = await self._click_incoming_accept()
+            if not clicked:
+                return _connection_result(
+                    url,
+                    "send_failed",
+                    "Could not find or click the Accept button.",
+                    profile=page_text,
+                )
+
+            verified_text = ""
+            verified_state = None
+            for attempt in range(2):
+                if attempt:
+                    await asyncio.sleep(3.0)
+                verified = await self.scrape_person(username, {"main_profile"})
+                verified_text = verified.get("sections", {}).get("main_profile", "")
+                verified_signals = await self._read_action_signals(username)
+                verified_state = detect_connection_state(verified_signals)
+                if verified_state == "already_connected":
+                    break
+
+            if verified_state != "already_connected":
+                return _connection_result(
+                    url,
+                    "send_failed",
+                    "Accepted, but the profile did not transition to 1st-degree.",
+                    profile=verified_text or page_text,
+                )
+
+            return _connection_result(
+                url,
+                "accepted",
+                "Connection request accepted.",
+                profile=verified_text,
+            )
+
+        state_messages = {
+            "self_profile": "Cannot accept a connection request from your own profile.",
+            "already_connected": "You are already connected with this profile.",
+            "pending": "This profile has an outgoing pending connection request, not an incoming one.",
+            "connectable": "This profile is connectable, but has not sent an incoming request.",
+            "follow_only": "This profile has no incoming connection request available to accept.",
+            "unavailable": "LinkedIn did not expose an incoming connection request for this profile.",
+        }
+        return _connection_result(
+            url,
+            "not_incoming_request",
+            state_messages.get(
+                state,
+                "LinkedIn did not expose an incoming connection request for this profile.",
+            ),
+            profile=page_text,
+        )
+
+    async def list_incoming_connection_requests(
+        self,
+        *,
+        max_scrolls: int | None = None,
+    ) -> dict[str, Any]:
+        """List incoming LinkedIn connection requests.
+
+        Reads the invitation manager without clicking action buttons. The raw
+        page text remains the primary payload, while references include compact
+        ``/in/...`` profile paths that can be passed to
+        ``accept_connection_request`` after extracting the username.
+        """
+        url = "https://www.linkedin.com/mynetwork/invitation-manager/"
+        extracted = await self.extract_page(
+            url,
+            section_name="connection_requests",
+            max_scrolls=max_scrolls,
+        )
+
+        sections: dict[str, str] = {}
+        references: dict[str, list[Reference]] = {}
+        section_errors: dict[str, dict[str, Any]] = {}
+        if extracted.text and extracted.text != _RATE_LIMITED_MSG:
+            sections["connection_requests"] = extracted.text
+            if extracted.references:
+                references["connection_requests"] = extracted.references
+        elif extracted.text == _RATE_LIMITED_MSG:
+            section_errors["connection_requests"] = {
+                "error_type": "rate_limit",
+                "error_message": extracted.text,
+            }
+        elif extracted.error:
+            section_errors["connection_requests"] = extracted.error
+
+        result: dict[str, Any] = {
+            "url": url,
+            "sections": sections,
+        }
+        if references:
+            result["references"] = references
+        if section_errors:
+            result["section_errors"] = section_errors
+        return result
+
     async def _extract_profile_urn(self) -> str | None:
         """Extract the recipient profile URN from the messaging compose link.
 
