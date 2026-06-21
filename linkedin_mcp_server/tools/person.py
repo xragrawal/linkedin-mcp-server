@@ -212,7 +212,13 @@ def register_person_tools(
             Dict with url, status, message, and note_sent.
             Statuses: pending, already_connected, follow_only,
             connect_unavailable, unavailable, send_failed,
-            note_not_supported, connected, or accepted.
+            note_not_supported, custom_note_limit_reached,
+            connected, or accepted.
+
+            When status is ``custom_note_limit_reached`` LinkedIn rejected
+            personalized invite notes because the free note quota for the
+            account is exhausted. The ``message`` is the raw Premium dialog
+            text read from LinkedIn.
         """
         try:
             extractor = extractor or await get_ready_extractor(
@@ -246,6 +252,165 @@ def register_person_tools(
                 raise_tool_error(relogin_exc, "connect_with_person")
         except Exception as e:
             raise_tool_error(e, "connect_with_person")  # NoReturn
+
+    @mcp.tool(
+        timeout=tool_timeout,
+        title="List Incoming Connection Requests",
+        annotations={"readOnlyHint": True, "openWorldHint": True},
+        tags={"person", "scraping"},
+        exclude_args=["extractor"],
+    )
+    async def list_incoming_connection_requests(
+        ctx: Context,
+        max_scrolls: Annotated[int, Field(ge=1, le=50)] | None = None,
+        extractor: Any | None = None,
+    ) -> dict[str, Any]:
+        """
+        List incoming LinkedIn connection requests.
+
+        Args:
+            ctx: FastMCP context for progress reporting
+            max_scrolls: Maximum scroll-to-bottom attempts for loading more
+                requests. Default (None) uses the extractor default.
+
+        Returns:
+            Dict with url, sections (connection_requests -> raw text), and
+            optional references. Profile references can be used to choose the
+            linkedin_username passed to accept_connection_request.
+        """
+        try:
+            extractor = extractor or await get_ready_extractor(
+                ctx, tool_name="list_incoming_connection_requests"
+            )
+            logger.info(
+                "Listing incoming connection requests (max_scrolls=%s)", max_scrolls
+            )
+
+            await ctx.report_progress(
+                progress=0,
+                total=100,
+                message="Listing incoming connection requests",
+            )
+
+            result = await extractor.list_incoming_connection_requests(
+                max_scrolls=max_scrolls,
+            )
+
+            await ctx.report_progress(progress=100, total=100, message="Complete")
+
+            return result
+
+        except AuthenticationError as e:
+            try:
+                await handle_auth_error(e, ctx)
+            except Exception as relogin_exc:
+                raise_tool_error(relogin_exc, "list_incoming_connection_requests")
+        except Exception as e:
+            raise_tool_error(e, "list_incoming_connection_requests")  # NoReturn
+
+    @mcp.tool(
+        timeout=tool_timeout,
+        title="List Connections",
+        annotations={"readOnlyHint": True, "openWorldHint": True},
+        tags={"person", "scraping"},
+        exclude_args=["extractor"],
+    )
+    async def list_connections(
+        ctx: Context,
+        max_scrolls: Annotated[int, Field(ge=1, le=50)] | None = None,
+        extractor: Any | None = None,
+    ) -> dict[str, Any]:
+        """
+        List the authenticated user's LinkedIn connections.
+
+        Args:
+            ctx: FastMCP context for progress reporting
+            max_scrolls: Maximum scroll-to-bottom attempts for loading more
+                connections. Default (None) uses the extractor default.
+
+        Returns:
+            Dict with url, sections (connections -> raw text), and optional
+            references. Person references contain /in/ profile paths for
+            listed connections.
+        """
+        try:
+            extractor = extractor or await get_ready_extractor(
+                ctx, tool_name="list_connections"
+            )
+            logger.info("Listing LinkedIn connections (max_scrolls=%s)", max_scrolls)
+
+            await ctx.report_progress(
+                progress=0,
+                total=100,
+                message="Listing LinkedIn connections",
+            )
+
+            result = await extractor.list_connections(max_scrolls=max_scrolls)
+
+            await ctx.report_progress(progress=100, total=100, message="Complete")
+
+            return result
+
+        except AuthenticationError as e:
+            try:
+                await handle_auth_error(e, ctx)
+            except Exception as relogin_exc:
+                raise_tool_error(relogin_exc, "list_connections")
+        except Exception as e:
+            raise_tool_error(e, "list_connections")  # NoReturn
+
+    @mcp.tool(
+        timeout=tool_timeout,
+        title="Accept Connection Request",
+        annotations={"destructiveHint": True, "openWorldHint": True},
+        tags={"person", "actions"},
+        exclude_args=["extractor"],
+    )
+    async def accept_connection_request(
+        linkedin_username: str,
+        ctx: Context,
+        extractor: Any | None = None,
+    ) -> dict[str, Any]:
+        """
+        Accept an incoming LinkedIn connection request from a person's profile.
+
+        The tool is annotated with destructiveHint so MCP clients will
+        prompt for user confirmation before execution. Unlike
+        connect_with_person, this tool never sends a new outgoing invitation.
+
+        Args:
+            linkedin_username: LinkedIn username (e.g., "stickerdaniel", "williamhgates")
+            ctx: FastMCP context for progress reporting
+
+        Returns:
+            Dict with url, status, message, and note_sent.
+            Statuses: accepted, not_incoming_request, send_failed, or unavailable.
+        """
+        try:
+            extractor = extractor or await get_ready_extractor(
+                ctx, tool_name="accept_connection_request"
+            )
+            logger.info("Accepting connection request from: %s", linkedin_username)
+
+            await ctx.report_progress(
+                progress=0,
+                total=100,
+                message="Starting LinkedIn connection accept flow",
+            )
+
+            result = await extractor.accept_connection_request(linkedin_username)
+
+            await ctx.report_progress(progress=100, total=100, message="Complete")
+
+            return result
+
+        except AuthenticationError as e:
+            try:
+                await handle_auth_error(e, ctx)
+            except Exception as relogin_exc:
+                raise_tool_error(relogin_exc, "accept_connection_request")
+        except Exception as e:
+            raise_tool_error(e, "accept_connection_request")  # NoReturn
 
     @mcp.tool(
         timeout=tool_timeout,

@@ -24,6 +24,9 @@ def _make_mock_extractor(scrape_result: dict) -> MagicMock:
     mock = MagicMock()
     mock.scrape_person = AsyncMock(return_value=scrape_result)
     mock.connect_with_person = AsyncMock(return_value=scrape_result)
+    mock.list_incoming_connection_requests = AsyncMock(return_value=scrape_result)
+    mock.list_connections = AsyncMock(return_value=scrape_result)
+    mock.accept_connection_request = AsyncMock(return_value=scrape_result)
     mock.scrape_company = AsyncMock(return_value=scrape_result)
     mock.scrape_job = AsyncMock(return_value=scrape_result)
     mock.search_jobs = AsyncMock(return_value=scrape_result)
@@ -383,6 +386,40 @@ class TestPersonTool:
             note=None,
         )
 
+    async def test_connect_with_person_custom_note_limit_reached(self, mock_context):
+        """The custom_note_limit_reached status returns LinkedIn's message."""
+        expected = {
+            "url": "https://www.linkedin.com/in/test-user/",
+            "status": "custom_note_limit_reached",
+            "message": "Wysyłaj nieograniczoną liczbę spersonalizowanych zaproszeń dzięki Premium",
+            "note_sent": False,
+        }
+        mock_extractor = _make_mock_extractor(expected)
+
+        from linkedin_mcp_server.tools.person import register_person_tools
+
+        mcp = FastMCP("test")
+        register_person_tools(mcp)
+
+        tool_fn = await get_tool_fn(mcp, "connect_with_person")
+        result = await tool_fn(
+            "test-user",
+            mock_context,
+            note="Hello!",
+            extractor=mock_extractor,
+        )
+
+        assert result["status"] == "custom_note_limit_reached"
+        assert (
+            result["message"]
+            == "Wysyłaj nieograniczoną liczbę spersonalizowanych zaproszeń dzięki Premium"
+        )
+        assert result["note_sent"] is False
+        mock_extractor.connect_with_person.assert_awaited_once_with(
+            "test-user",
+            note="Hello!",
+        )
+
     async def test_connect_with_person_auth_error(self, monkeypatch):
         """Auth failures in the DI layer trigger auto-relogin and report the login browser."""
         from fastmcp.exceptions import ToolError
@@ -431,6 +468,86 @@ class TestPersonTool:
                 "connect_with_person",
                 {"linkedin_username": "test"},
             )
+
+    async def test_accept_connection_request(self, mock_context):
+        expected = {
+            "url": "https://www.linkedin.com/in/test-user/",
+            "status": "accepted",
+            "message": "Connection request accepted.",
+            "note_sent": False,
+        }
+        mock_extractor = _make_mock_extractor(expected)
+
+        from linkedin_mcp_server.tools.person import register_person_tools
+
+        mcp = FastMCP("test")
+        register_person_tools(mcp)
+
+        tool_fn = await get_tool_fn(mcp, "accept_connection_request")
+        result = await tool_fn(
+            "test-user",
+            mock_context,
+            extractor=mock_extractor,
+        )
+
+        assert result["status"] == "accepted"
+        mock_extractor.accept_connection_request.assert_awaited_once_with("test-user")
+
+    async def test_list_incoming_connection_requests(self, mock_context):
+        expected = {
+            "url": "https://www.linkedin.com/mynetwork/invitation-manager/",
+            "sections": {"connection_requests": "Jane Doe\nFounder at Acme"},
+            "references": {
+                "connection_requests": [
+                    {"kind": "person", "url": "/in/jane-doe/", "text": "Jane Doe"}
+                ]
+            },
+        }
+        mock_extractor = _make_mock_extractor(expected)
+
+        from linkedin_mcp_server.tools.person import register_person_tools
+
+        mcp = FastMCP("test")
+        register_person_tools(mcp)
+
+        tool_fn = await get_tool_fn(mcp, "list_incoming_connection_requests")
+        result = await tool_fn(
+            mock_context,
+            max_scrolls=12,
+            extractor=mock_extractor,
+        )
+
+        assert "connection_requests" in result["sections"]
+        mock_extractor.list_incoming_connection_requests.assert_awaited_once_with(
+            max_scrolls=12,
+        )
+
+    async def test_list_connections(self, mock_context):
+        expected = {
+            "url": "https://www.linkedin.com/mynetwork/invite-connect/connections/",
+            "sections": {"connections": "Jane Doe\nFounder at Acme"},
+            "references": {
+                "connections": [
+                    {"kind": "person", "url": "/in/jane-doe/", "text": "Jane Doe"}
+                ]
+            },
+        }
+        mock_extractor = _make_mock_extractor(expected)
+
+        from linkedin_mcp_server.tools.person import register_person_tools
+
+        mcp = FastMCP("test")
+        register_person_tools(mcp)
+
+        tool_fn = await get_tool_fn(mcp, "list_connections")
+        result = await tool_fn(
+            mock_context,
+            max_scrolls=20,
+            extractor=mock_extractor,
+        )
+
+        assert "connections" in result["sections"]
+        mock_extractor.list_connections.assert_awaited_once_with(max_scrolls=20)
 
 
 class TestCompanyTools:
@@ -1127,6 +1244,9 @@ class TestToolTimeouts:
         tool_names = (
             "get_person_profile",
             "connect_with_person",
+            "list_incoming_connection_requests",
+            "list_connections",
+            "accept_connection_request",
             "get_sidebar_profiles",
             "search_people",
             "get_company_profile",
@@ -1156,6 +1276,9 @@ class TestToolTimeouts:
             "get_person_profile",
             "get_my_profile",
             "connect_with_person",
+            "list_incoming_connection_requests",
+            "list_connections",
+            "accept_connection_request",
             "get_sidebar_profiles",
             "search_people",
             "get_company_profile",
