@@ -310,6 +310,57 @@ def register_person_tools(
 
     @mcp.tool(
         timeout=tool_timeout,
+        title="List Connections",
+        annotations={"readOnlyHint": True, "openWorldHint": True},
+        tags={"person", "scraping"},
+        exclude_args=["extractor"],
+    )
+    async def list_connections(
+        ctx: Context,
+        max_scrolls: Annotated[int, Field(ge=1, le=50)] | None = None,
+        extractor: Any | None = None,
+    ) -> dict[str, Any]:
+        """
+        List the authenticated user's LinkedIn connections.
+
+        Args:
+            ctx: FastMCP context for progress reporting
+            max_scrolls: Maximum scroll-to-bottom attempts for loading more
+                connections. Default (None) uses the extractor default.
+
+        Returns:
+            Dict with url, sections (connections -> raw text), and optional
+            references. Person references contain /in/ profile paths for
+            listed connections.
+        """
+        try:
+            extractor = extractor or await get_ready_extractor(
+                ctx, tool_name="list_connections"
+            )
+            logger.info("Listing LinkedIn connections (max_scrolls=%s)", max_scrolls)
+
+            await ctx.report_progress(
+                progress=0,
+                total=100,
+                message="Listing LinkedIn connections",
+            )
+
+            result = await extractor.list_connections(max_scrolls=max_scrolls)
+
+            await ctx.report_progress(progress=100, total=100, message="Complete")
+
+            return result
+
+        except AuthenticationError as e:
+            try:
+                await handle_auth_error(e, ctx)
+            except Exception as relogin_exc:
+                raise_tool_error(relogin_exc, "list_connections")
+        except Exception as e:
+            raise_tool_error(e, "list_connections")  # NoReturn
+
+    @mcp.tool(
+        timeout=tool_timeout,
         title="Accept Connection Request",
         annotations={"destructiveHint": True, "openWorldHint": True},
         tags={"person", "actions"},

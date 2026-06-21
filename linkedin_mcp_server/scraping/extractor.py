@@ -2321,6 +2321,49 @@ class LinkedInExtractor:
             result["section_errors"] = section_errors
         return result
 
+    async def list_connections(
+        self,
+        *,
+        max_scrolls: int | None = None,
+    ) -> dict[str, Any]:
+        """List the authenticated user's LinkedIn connections.
+
+        Reads the first-degree connections page without taking actions. The raw
+        page text remains the main payload, while references include compact
+        ``/in/...`` profile paths for listed connections.
+        """
+        url = "https://www.linkedin.com/mynetwork/invite-connect/connections/"
+        extracted = await self.extract_page(
+            url,
+            section_name="connections",
+            max_scrolls=max_scrolls,
+        )
+
+        sections: dict[str, str] = {}
+        references: dict[str, list[Reference]] = {}
+        section_errors: dict[str, dict[str, Any]] = {}
+        if extracted.text and extracted.text != _RATE_LIMITED_MSG:
+            sections["connections"] = extracted.text
+            if extracted.references:
+                references["connections"] = extracted.references
+        elif extracted.text == _RATE_LIMITED_MSG:
+            section_errors["connections"] = {
+                "error_type": "rate_limit",
+                "error_message": extracted.text,
+            }
+        elif extracted.error:
+            section_errors["connections"] = extracted.error
+
+        result: dict[str, Any] = {
+            "url": url,
+            "sections": sections,
+        }
+        if references:
+            result["references"] = references
+        if section_errors:
+            result["section_errors"] = section_errors
+        return result
+
     async def _extract_profile_urn(self) -> str | None:
         """Extract the recipient profile URN from the messaging compose link.
 

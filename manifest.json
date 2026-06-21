@@ -57,6 +57,10 @@
       "description": "List incoming LinkedIn connection requests with profile references"
     },
     {
+      "name": "list_connections",
+      "description": "List the authenticated user's LinkedIn connections with profile references"
+    },
+    {
       "name": "accept_connection_request",
       "description": "Accept a specific incoming LinkedIn connection request by username without sending a new outgoing invitation"
     },

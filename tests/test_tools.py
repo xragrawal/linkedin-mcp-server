@@ -25,6 +25,7 @@ def _make_mock_extractor(scrape_result: dict) -> MagicMock:
     mock.scrape_person = AsyncMock(return_value=scrape_result)
     mock.connect_with_person = AsyncMock(return_value=scrape_result)
     mock.list_incoming_connection_requests = AsyncMock(return_value=scrape_result)
+    mock.list_connections = AsyncMock(return_value=scrape_result)
     mock.accept_connection_request = AsyncMock(return_value=scrape_result)
     mock.scrape_company = AsyncMock(return_value=scrape_result)
     mock.scrape_job = AsyncMock(return_value=scrape_result)
@@ -520,6 +521,33 @@ class TestPersonTool:
         mock_extractor.list_incoming_connection_requests.assert_awaited_once_with(
             max_scrolls=12,
         )
+
+    async def test_list_connections(self, mock_context):
+        expected = {
+            "url": "https://www.linkedin.com/mynetwork/invite-connect/connections/",
+            "sections": {"connections": "Jane Doe\nFounder at Acme"},
+            "references": {
+                "connections": [
+                    {"kind": "person", "url": "/in/jane-doe/", "text": "Jane Doe"}
+                ]
+            },
+        }
+        mock_extractor = _make_mock_extractor(expected)
+
+        from linkedin_mcp_server.tools.person import register_person_tools
+
+        mcp = FastMCP("test")
+        register_person_tools(mcp)
+
+        tool_fn = await get_tool_fn(mcp, "list_connections")
+        result = await tool_fn(
+            mock_context,
+            max_scrolls=20,
+            extractor=mock_extractor,
+        )
+
+        assert "connections" in result["sections"]
+        mock_extractor.list_connections.assert_awaited_once_with(max_scrolls=20)
 
 
 class TestCompanyTools:
@@ -1217,6 +1245,7 @@ class TestToolTimeouts:
             "get_person_profile",
             "connect_with_person",
             "list_incoming_connection_requests",
+            "list_connections",
             "accept_connection_request",
             "get_sidebar_profiles",
             "search_people",
@@ -1248,6 +1277,7 @@ class TestToolTimeouts:
             "get_my_profile",
             "connect_with_person",
             "list_incoming_connection_requests",
+            "list_connections",
             "accept_connection_request",
             "get_sidebar_profiles",
             "search_people",

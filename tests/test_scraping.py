@@ -1788,6 +1788,45 @@ class TestConnectWithPerson:
             == "rate_limit"
         )
 
+    async def test_list_connections(self, mock_page):
+        extractor = LinkedInExtractor(mock_page)
+        references: list[Reference] = [
+            {"kind": "person", "url": "/in/jane-doe/", "text": "Jane Doe"},
+        ]
+
+        with patch.object(
+            extractor,
+            "extract_page",
+            new_callable=AsyncMock,
+            return_value=extracted("Jane Doe\nFounder at Acme", references),
+        ) as mock_extract:
+            result = await extractor.list_connections(max_scrolls=8)
+
+        assert result["url"] == (
+            "https://www.linkedin.com/mynetwork/invite-connect/connections/"
+        )
+        assert result["sections"]["connections"] == "Jane Doe\nFounder at Acme"
+        assert result["references"]["connections"] == references
+        mock_extract.assert_awaited_once_with(
+            "https://www.linkedin.com/mynetwork/invite-connect/connections/",
+            section_name="connections",
+            max_scrolls=8,
+        )
+
+    async def test_list_connections_rate_limited(self, mock_page):
+        extractor = LinkedInExtractor(mock_page)
+
+        with patch.object(
+            extractor,
+            "extract_page",
+            new_callable=AsyncMock,
+            return_value=extracted(_RATE_LIMITED_MSG),
+        ):
+            result = await extractor.list_connections()
+
+        assert result["sections"] == {}
+        assert result["section_errors"]["connections"]["error_type"] == "rate_limit"
+
     async def test_returns_unavailable_when_no_signals_and_text(self, mock_page):
         """No structural signals, no actionable text → connect_unavailable."""
         extractor = LinkedInExtractor(mock_page)
